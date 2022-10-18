@@ -1,6 +1,14 @@
 from enum import Enum
+import numpy as np
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import eigs
 import random
 import functools
+from itertools import pairwise
+import itertools
+from indices import indices
+from index_space import fill
+from collections import Counter
 
 
 class Action(Enum):
@@ -172,18 +180,107 @@ class Machine:
 
         return Machine(transitions, program, memory, nstates, nprogstates, nmemstates)
 
+    def transition_matrix(self):
+        #        idc = fill(0, [self.nstates, self.nprogstates, self.nmemstates], [])
+        idc = indices([self.nstates, self.nprogstates, self.nmemstates])
+        print(idc)
+
+        rows = []
+        cols = []
+        data = []
+
+        for (
+            (state, prog, mem),
+            (newstate, prog_action, (mem_action, mem_write)),
+            prior,
+        ) in filter(
+            lambda x: x[0][0] < self.nstates
+            and x[0][1] < self.nprogstates
+            and x[0][2] < self.nmemstates,
+            self.transitions,
+        ):
+            y = [state, prog, mem]
+            idx = idc.index(y)
+
+            v = []
+
+            if prog_action == Action.Right:
+                p = Counter(
+                    sorted(
+                        map(
+                            lambda x: x[1],
+                            filter(lambda x: x[0] == prog, pairwise(self.program)),
+                        )
+                    )
+                ).items()
+            elif prog_action == Action.Left:
+                p = Counter(
+                    sorted(
+                        map(
+                            lambda x: x[0],
+                            filter(lambda x: x[1] == prog, pairwise(self.program)),
+                        )
+                    )
+                ).items()
+            elif prog_action == Action.Stay:
+                p = [(self.program[self.program_index], 1)]
+            else:
+                raise Exception("cannot write to program")
+
+            if mem_action == Action.Right:
+                m = Counter(
+                    sorted(
+                        map(
+                            lambda x: x[1],
+                            filter(lambda x: x[0] == mem, pairwise(self.program)),
+                        )
+                    )
+                ).items()
+            elif mem_action == Action.Left:
+                m = Counter(
+                    sorted(
+                        map(
+                            lambda x: x[0],
+                            filter(lambda x: x[1] == mem, pairwise(self.program)),
+                        )
+                    )
+                ).items()
+            elif mem_action == Action.Stay:
+                m = [(self.memory[self.memory_index], 1)]
+            else:
+                m = [(mem_write, 1)]
+
+            psum = sum([c for elem, c in p])
+            msum = sum([c for elem, c in m])
+            sumprod = psum * msum
+
+            for (newprog, pcount), (newmem, mcount) in itertools.product(p, m):
+                rows.append(idx)
+                to = [newstate, newprog, newmem]
+                to_idx = idc.index(to)
+                cols.append(to_idx)
+                data.append(float(mcount * pcount) / sumprod)
+
+            v.append(((state, prog, mem), (newstate, p, m)))
+
+        nrows = self.nstates * self.nprogstates * self.nmemstates
+        ncols = nrows
+        csr = csr_matrix((data, (rows, cols)), shape=(nrows, ncols))
+        return eigs(csr, k=6)
+
 
 if __name__ == "__main__":
     print("hello world")
     ntransitions = 50
     program_size = 100
     memory_size = 100
-    nstates = 5
+    nstates = 2
     nprogstates = 2
     nmemstates = 2
     m = Machine.gen_random(
         ntransitions, program_size, memory_size, nstates, nprogstates, nmemstates
     )
+    print(m.transition_matrix())
     nsteps = 1000
     count = 0
     for i in range(nsteps):

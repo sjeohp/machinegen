@@ -240,7 +240,7 @@ impl Machine {
                     self.program
                         .as_slice()
                         .windows(2)
-                        .filter(|&w| w[1] == mem)
+                        .filter(|&w| w[1] == prog)
                         .map(|w| w[0])
                         .sorted()
                         .dedup_with_count()
@@ -258,7 +258,7 @@ impl Machine {
                     self.memory
                         .as_slice()
                         .windows(2)
-                        .filter(|&w| w[0] == prog)
+                        .filter(|&w| w[0] == mem)
                         .map(|w| w[1])
                         .sorted()
                         .dedup_with_count()
@@ -292,7 +292,7 @@ impl Machine {
                 let to = vec![newstate as usize, *newprog as usize, *newmem as usize];
                 let to_idx = idc.iter().position(|x| x == &to).expect("must be found");
                 icols.push(to_idx);
-                xvals.push(mcount * pcount / prodsum); // product of m and p probabilities
+                xvals.push((mcount * pcount) as f32 / prodsum as f32); // product of m and p probabilities
             }
 
             v.push(((state, prog, mem), (newstate, p, m)));
